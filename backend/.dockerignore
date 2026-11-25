@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.env.*
+!.env.example
+.git/
+.pytest_cache/
+chroma_db/
+knowledge_base/
+*.sqlite3
+*.log
+tests/

@@ -1,7 +1,9 @@
 # Environment variables
 .env
 .env.local
-.env.*.local
+.env.*
+!.env.example
+!backend/.env.example
 
 # Python virtual environments
 venv/
@@ -35,3 +37,17 @@ backend/chroma_db/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Unused demo folder & raw archive
+backend/knowledge_base/
+fortivex_knowledge_base.zip
+
+# Logs & test coverage
+*.log
+logs/
+.coverage
+htmlcov/
+coverage/
+
+# Local Docker Compose overrides
+docker-compose.override.yml

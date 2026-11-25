@@ -59,6 +59,22 @@ An end-to-end AI-powered sales voice agent platform built with **React + Vite + 
   - `GET /api/crm/leads/{lead_id}`
   - `GET /api/crm/leads/{lead_id}/appointments`
   - `POST /api/crm/leads/{lead_id}/notes`
+- **Conversation Summaries:**
+  - `POST /api/summaries/{session_id}/generate`
+  - `GET /api/summaries/{session_id}`
+  - `GET /api/summaries` (paginated: `limit`, `offset`, `qualification_status`)
+- **Business Analytics & Insights:**
+  - `GET /api/analytics/overview`
+  - `GET /api/analytics/leads`
+  - `GET /api/analytics/sentiment`
+  - `GET /api/analytics/appointments`
+  - `GET /api/analytics/sales-insights`
+
+### 4. Call Summarization & Business Analytics
+- **Summary Storage (`conversation_summaries`):** Stores grounded structured summaries (`summary_version`, `customer_requirements`, `pain_points`, `objections`, `customer_questions`, `unresolved_questions`, `recommended_next_action`) alongside PostgreSQL-sourced `Lead`, `Sentiment`, and `Appointment` fields. Includes a deterministic fallback if Gemini is rate-limited.
+- **Metric Definitions:**
+  - **Appointment Booking Rate (%):** `(leads with >= 1 CONFIRMED or COMPLETED appointment in period / total_leads in period) * 100` (`0.0` when `total_leads == 0`).
+  - **Date Filters:** Supports `today`, `7d`, `30d`, `90d`, and `custom` (`start_date`..`end_date`) using UTC day boundaries.
 
 ---
 
@@ -74,7 +90,45 @@ Optional overrides: `GEMINI_EMBEDDING_MODEL`, `RAG_ADMIN_TOKEN`, `BOOKING_DEFAUL
 
 ---
 
-## Local Setup & Running
+## Docker Deployment (Containerized)
+
+### Prerequisites
+- Docker Desktop / Docker Engine + Docker Compose v2+
+- Valid `backend/.env` (or root `.env`) containing `GEMINI_API_KEY`
+
+### Docker Architecture
+- **`frontend` (`nginx:1.27-alpine`, port `5173:80`):** Serves the production Vite React build with SPA fallback and proxies `/api/`, `/health`, and `/ready` to `http://backend:8001`.
+- **`backend` (`python:3.11-slim`, port `8001:8001`):** Runs FastAPI + Uvicorn as non-root `appuser` with persistent ChromaDB volume `chroma_data:/app/chroma_db`.
+- **`db` (`postgres:18-alpine`, bound to `127.0.0.1:5432`):** Stores CRM, lead, conversation, sentiment, appointment, and summary records in persistent volume `postgres_data`.
+
+### Docker Commands
+
+```powershell
+# Build images
+docker compose build
+
+# Start all services in background
+docker compose up -d
+
+# Check container status & health
+docker compose ps
+
+# Follow logs
+docker compose logs -f
+
+# Stop containers (preserves PostgreSQL and ChromaDB volumes)
+docker compose down
+```
+
+> **Warning:** Never run `docker compose down -v` casually — the `-v` flag permanently deletes the `postgres_data` and `chroma_data` volumes.
+
+### Health & Readiness Checks
+- **Liveness:** `GET /health` (process is up)
+- **Readiness:** `GET /ready` (verifies PostgreSQL `SELECT 1` and ChromaDB collection access; returns `503` if either dependency is unavailable)
+
+---
+
+## Local Setup & Running (Without Docker)
 
 ### Backend
 ```powershell
@@ -95,6 +149,18 @@ Open `http://localhost:5173` in Chrome or Edge.
 
 ## Known MVP Limitations
 
-- **Authorization:** Customer-facing appointment endpoints support `session_id` isolation checks, while CRM dashboard endpoints are unauthenticated for local MVP demonstration. Production deployment requires user/role authentication (e.g., JWT/OAuth).
-- **External Calendar & CRM Sync:** Appointments and CRM records are persisted in PostgreSQL; Google Calendar, HubSpot, and Salesforce sync are not yet connected.
+- **Authorization:** Customer-facing appointment endpoints support `session_id` isolation checks, while CRM, summary, and analytics dashboard endpoints are unauthenticated for local MVP demonstration. Production deployment requires role-based authentication (JWT/OAuth).
+- **External Calendar & CRM Sync:** Appointments and CRM records are persisted in PostgreSQL; Google Calendar, HubSpot, and Salesforce are not yet connected.
 - **Browser Voice Support:** Web Speech API (`SpeechRecognition`) requires Chrome or Edge.
+- **Single-Host Concurrency:** This single-machine Docker Compose setup is designed for MVP/demo workloads, not 100,000 concurrent users.
+
+---
+
+## Proposed Future Scaling Architecture (Not Yet Implemented)
+
+To scale beyond a single host:
+- **Frontend:** Horizontal scaling behind a CDN and load balancer.
+- **API Tier:** Multiple stateless FastAPI instances behind an API Gateway with rate limiting.
+- **Database & Cache:** Managed PostgreSQL (primary + read replicas) and Redis for session coordination/caching.
+- **Async Workers:** Dedicated background workers (e.g., Celery/ARQ) for call summarization and document ingestion.
+- **Storage & Observability:** Object storage (S3/GCS) for recordings/documents and centralized logging/metrics (OpenTelemetry, Prometheus, Grafana).

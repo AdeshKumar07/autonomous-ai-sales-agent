@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import AppointmentBooking from "./components/AppointmentBooking";
 import AppointmentCalendar from "./components/AppointmentCalendar";
 import AppointmentPanel from "./components/AppointmentPanel";
 import CRMPanel from "./components/CRMPanel";
 import ChatWindow from "./components/ChatWindow";
+import ConversationSummary from "./components/ConversationSummary";
 import Header from "./components/Header";
 import KnowledgePanel from "./components/KnowledgePanel";
 import LeadPanel from "./components/LeadPanel";
@@ -345,6 +347,14 @@ function VoiceAgentWorkspace() {
       {activeView === "crm" ? (
         <main className="flex-1 overflow-y-auto">
           <CRMPanel />
+        </main>
+      ) : activeView === "summary" ? (
+        <main className="flex-1 overflow-y-auto">
+          <ConversationSummary sessionId={sessionId} />
+        </main>
+      ) : activeView === "insights" ? (
+        <main className="flex-1 overflow-y-auto">
+          <AnalyticsDashboard />
         </main>
       ) : activeView === "appointments" ? (
         <main className="flex-1 overflow-y-auto">

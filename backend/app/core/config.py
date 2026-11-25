@@ -1,4 +1,4 @@
-"""Application configuration loaded securely from backend/.env."""
+"""Application configuration loaded securely from environment variables."""
 
 from dataclasses import dataclass
 from functools import lru_cache
@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = BACKEND_DIR / ".env"
 
-# Load backend/.env if present; existing process env vars take precedence if set.
+# Load backend/.env if present; container/process env vars take precedence.
 load_dotenv(dotenv_path=ENV_FILE)
 
 
@@ -38,10 +38,18 @@ def normalize_database_url(raw_url: str) -> str:
     return url
 
 
+def _parse_cors_origins(raw_origins: str) -> tuple[str, ...]:
+    items = [o.strip() for o in (raw_origins or "").split(",") if o.strip()]
+    if items:
+        return tuple(items)
+    return ("http://localhost:5173", "http://127.0.0.1:5173")
+
+
 @dataclass(frozen=True)
 class Settings:
     """Validated runtime settings for the backend service."""
 
+    app_env: str
     gemini_api_key: str
     gemini_model: str
     gemini_embedding_model: str
@@ -56,7 +64,6 @@ class Settings:
     rag_chunk_overlap: int
     rag_top_k: int
     rag_admin_token: str
-    # Configurable MVP booking calendar defaults (not official FORTIVEX policies)
     booking_working_days: tuple[int, ...]
     booking_open_hour: int
     booking_close_hour: int
@@ -70,6 +77,7 @@ class Settings:
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached application settings."""
+    app_env = os.getenv("APP_ENV", "development").strip().lower() or "development"
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
     embedding_model = (
@@ -87,28 +95,30 @@ def get_settings() -> Settings:
         os.getenv("CHROMA_COLLECTION_NAME", "fortivex_research_kb").strip()
         or "fortivex_research_kb"
     )
+    chroma_dir_raw = os.getenv("CHROMA_PERSIST_DIR", "").strip()
+    chroma_persist_dir = Path(chroma_dir_raw) if chroma_dir_raw else (BACKEND_DIR / "chroma_db")
+
     rag_admin_token = os.getenv("RAG_ADMIN_TOKEN", "").strip()
     default_tz = os.getenv("BOOKING_DEFAULT_TIMEZONE", "UTC").strip() or "UTC"
+    cors_origins = _parse_cors_origins(os.getenv("CORS_ORIGINS", ""))
 
     return Settings(
+        app_env=app_env,
         gemini_api_key=api_key,
         gemini_model=model,
         gemini_embedding_model=embedding_model,
         gemini_timeout_seconds=timeout,
         database_url=database_url,
         max_history_turns=20,
-        cors_origins=(
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-        ),
+        cors_origins=cors_origins,
         knowledge_base_dir=BACKEND_DIR / "app" / "knowledge_base",
-        chroma_persist_dir=BACKEND_DIR / "chroma_db",
+        chroma_persist_dir=chroma_persist_dir,
         chroma_collection_name=collection_name,
         rag_chunk_size=500,
         rag_chunk_overlap=80,
         rag_top_k=4,
         rag_admin_token=rag_admin_token,
-        booking_working_days=(0, 1, 2, 3, 4),  # Mon-Fri
+        booking_working_days=(0, 1, 2, 3, 4),
         booking_open_hour=int(os.getenv("BOOKING_OPEN_HOUR", "9")),
         booking_close_hour=int(os.getenv("BOOKING_CLOSE_HOUR", "18")),
         booking_slot_minutes=int(os.getenv("BOOKING_SLOT_MINUTES", "30")),
@@ -123,7 +133,15 @@ def validate_gemini_config(settings: Settings | None = None) -> Settings:
     """Ensure required Gemini configuration values are present without exposing secrets."""
     cfg = settings or get_settings()
     if not cfg.gemini_api_key:
-        raise RuntimeError("GEMINI_API_KEY is not configured in backend/.env.")
+        raise RuntimeError("GEMINI_API_KEY is not configured.")
     if not cfg.gemini_model:
-        raise RuntimeError("GEMINI_MODEL is not configured in backend/.env.")
+        raise RuntimeError("GEMINI_MODEL is not configured.")
+    return cfg
+
+
+def validate_startup_config(settings: Settings | None = None) -> Settings:
+    """Validate all required environment variables at application startup."""
+    cfg = validate_gemini_config(settings)
+    if not cfg.database_url:
+        raise RuntimeError("DATABASE_URL is not configured.")
     return cfg

@@ -14,6 +14,8 @@ function Header({
     { id: "voice", label: "Voice Agent" },
     { id: "appointments", label: "Appointments" },
     { id: "crm", label: "CRM" },
+    { id: "summary", label: "Summary" },
+    { id: "insights", label: "Insights" },
   ];
 
   return (

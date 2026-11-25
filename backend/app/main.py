@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import get_settings
-from app.database.db import init_db
+from app.core.config import get_settings, validate_startup_config
+from app.database.db import check_db_connection, init_db_with_retry
 from app.rag.ingest import ingest_knowledge_base
+from app.rag.retriever import get_knowledge_status
 from app.routes.agent_routes import router as agent_router
 from app.routes.analytics_routes import router as analytics_router
 from app.routes.appointment_routes import router as appointment_router
@@ -12,23 +14,30 @@ from app.routes.knowledge_routes import router as knowledge_router
 from app.routes.lead_routes import router as lead_router
 from app.routes.summary_routes import router as summary_router
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Initialize PostgreSQL tables and ingest any new/updated knowledge docs on startup."""
-    init_db()
+    """Validate config, initialize PostgreSQL with retry, and ingest new/updated docs."""
+    validate_startup_config(settings)
+    init_db_with_retry()
     try:
         ingest_knowledge_base(force=False)
     except Exception:
-        pass
+        logger.warning("Initial knowledge base ingestion skipped due to transient error.")
     yield
 
 
 app = FastAPI(
     title="Autonomous AI Sales Voice Agent API",
-    version="0.6.0",
+    version="1.0.0",
+    debug=False,
     lifespan=lifespan,
 )
 
@@ -51,5 +60,36 @@ app.include_router(analytics_router)
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint to verify the API server is running."""
-    return {"status": "ok", "service": "autonomous-ai-sales-agent-backend"}
+    """Liveness endpoint confirming the FastAPI process is running."""
+    return {
+        "status": "ok",
+        "service": "autonomous-ai-sales-agent-backend",
+        "env": settings.app_env,
+    }
+
+
+@app.get("/ready")
+async def readiness_check():
+    """Readiness endpoint verifying PostgreSQL and ChromaDB dependencies."""
+    db_ok = check_db_connection()
+    try:
+        kb_status = get_knowledge_status()
+        chroma_ok = bool(kb_status.get("chromadb_connected"))
+    except Exception:
+        chroma_ok = False
+
+    if not db_ok or not chroma_ok:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "not_ready",
+                "database": "ok" if db_ok else "unavailable",
+                "chromadb": "ok" if chroma_ok else "unavailable",
+            },
+        )
+
+    return {
+        "status": "ready",
+        "database": "ok",
+        "chromadb": "ok",
+    }
