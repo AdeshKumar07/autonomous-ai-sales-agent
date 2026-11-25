@@ -26,7 +26,7 @@ For a concise executive summary, see [PROJECT_REPORT.md](PROJECT_REPORT.md). For
 ---
 
 ## 4. Technology Stack
-- **Frontend:** React 19, Vite 8, JavaScript, Tailwind CSS v4, Axios, React Router DOM, Lucide React, Recharts, Browser Web Speech API.
+- **Frontend:** React 19, JavaScript, Tailwind CSS , Axios,Recharts, Browser Web Speech API.
 - **Backend:** Python 3.11, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2.1, `psycopg2-binary`, `python-dotenv`, `google-genai`.
 - **Databases & Vector Store:** PostgreSQL 18 (`postgres:18-alpine`), ChromaDB (`1.5.9`, `models/gemini-embedding-001`).
 - **Containerization:** Docker, Docker Compose, Nginx (`nginx:1.27-alpine`).
